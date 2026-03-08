@@ -1,0 +1,888 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0d1117">
+<title>DocReader</title>
+<link rel="manifest" href="manifest.json">
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root {
+  --bg:       #0d1117;
+  --bg2:      #161b22;
+  --bg3:      #1e2530;
+  --bg4:      #252d3a;
+  --border:   #2a3344;
+  --text:     #e6edf3;
+  --text2:    #8b949e;
+  --text3:    #484f58;
+  --accent:   #4f8ef7;
+  --accent2:  #7c6af7;
+  --green:    #3fb950;
+  --orange:   #f0883e;
+  --red:      #f85149;
+  --yellow:   #d29922;
+  --r:        16px;
+  --font:     'Nunito', sans-serif;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bot: env(safe-area-inset-bottom, 0px);
+}
+.light {
+  --bg:     #f6f8fa;
+  --bg2:    #ffffff;
+  --bg3:    #eef1f5;
+  --bg4:    #e3e8f0;
+  --border: #d0d7de;
+  --text:   #1f2328;
+  --text2:  #57606a;
+  --text3:  #9198a1;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+html, body { height:100%; overflow:hidden; }
+
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  transition: background .25s, color .25s;
+  padding-top: var(--safe-top);
+  padding-bottom: var(--safe-bot);
+}
+
+/* ── SCREENS ── */
+.screen { display:none; flex-direction:column; height:100vh; height:100dvh; }
+.screen.active { display:flex; }
+
+/* ═══════════════════════════
+   HOME SCREEN
+═══════════════════════════ */
+#home {
+  background: var(--bg);
+}
+.home-header {
+  padding: 20px 20px 12px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.app-logo {
+  display: flex; align-items: center; gap: 10px;
+}
+.logo-icon-wrap {
+  width: 40px; height: 40px; border-radius: 12px;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.2rem; box-shadow: 0 4px 12px rgba(79,142,247,0.35);
+}
+.logo-text {
+  font-size: 1.2rem; font-weight: 900;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+}
+.logo-sub { font-size: 0.68rem; color: var(--text3); font-weight: 600; letter-spacing:.04em; -webkit-text-fill-color: var(--text3); }
+
+.header-actions { display:flex; gap:8px; }
+.icon-btn {
+  width: 36px; height: 36px; border-radius: 10px;
+  border: 1px solid var(--border); background: var(--bg3);
+  color: var(--text2); font-size: 1rem;
+  display: flex; align-items:center; justify-content:center;
+  cursor: pointer; transition: all .18s;
+}
+.icon-btn:active { transform: scale(.93); background: var(--bg4); }
+
+/* UPLOAD ZONE */
+.upload-zone {
+  margin: 0 16px 16px;
+  border: 2px dashed var(--border);
+  border-radius: var(--r); padding: 28px 20px;
+  text-align: center; cursor: pointer;
+  background: var(--bg2); transition: all .22s;
+  position: relative; overflow: hidden;
+}
+.upload-zone::before {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(135deg, rgba(79,142,247,.04), rgba(124,106,247,.04));
+}
+.upload-zone:active, .upload-zone.drag { border-color: var(--accent); background: rgba(79,142,247,.07); }
+.upload-zone input { position:absolute; inset:0; opacity:0; cursor:pointer; }
+.upload-emoji { font-size: 2.4rem; margin-bottom: 10px; }
+.upload-title { font-size: .95rem; font-weight: 800; margin-bottom: 4px; }
+.upload-sub { font-size: .78rem; color: var(--text2); margin-bottom: 14px; }
+.fmt-chips { display:flex; gap:6px; justify-content:center; flex-wrap:wrap; }
+.chip {
+  padding: 3px 10px; border-radius: 20px;
+  font-size: .7rem; font-weight: 700; letter-spacing:.04em;
+}
+.chip-pdf   { background:rgba(248,81,73,.15);  color:#f85149; }
+.chip-word  { background:rgba(79,142,247,.15); color:#4f8ef7; }
+.chip-ppt   { background:rgba(240,136,62,.15); color:#f0883e; }
+.chip-excel { background:rgba(63,185,80,.15);  color:#3fb950; }
+.chip-txt   { background:rgba(124,106,247,.15);color:#7c6af7; }
+
+/* RECENT SECTION */
+.section-head {
+  padding: 6px 20px 10px;
+  display: flex; align-items:center; justify-content:space-between;
+}
+.section-title { font-size:.78rem; font-weight:800; letter-spacing:.1em; text-transform:uppercase; color:var(--text3); }
+.clear-all { font-size:.75rem; color:var(--red); font-weight:700; background:none; border:none; cursor:pointer; font-family:var(--font); }
+
+.doc-list { flex:1; overflow-y:auto; padding: 0 12px 80px; }
+.doc-card {
+  display:flex; align-items:center; gap:12px;
+  padding: 12px 14px; border-radius: var(--r);
+  background: var(--bg2); border: 1px solid var(--border);
+  margin-bottom: 8px; cursor:pointer; transition: all .18s;
+  position: relative;
+}
+.doc-card:active { transform:scale(.98); background:var(--bg3); }
+.doc-card-icon {
+  width: 46px; height: 46px; border-radius: 12px;
+  display:flex; align-items:center; justify-content:center;
+  font-size:1.4rem; flex-shrink:0;
+}
+.doc-card-info { flex:1; overflow:hidden; }
+.doc-card-name { font-size:.88rem; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.doc-card-meta { font-size:.72rem; color:var(--text3); margin-top:2px; }
+.doc-card-del {
+  padding:6px; background:none; border:none; color:var(--text3);
+  cursor:pointer; font-size:.9rem; flex-shrink:0; border-radius:8px;
+  transition: all .15s;
+}
+.doc-card-del:active { color:var(--red); background:rgba(248,81,73,.1); }
+
+.empty-docs {
+  text-align:center; padding:40px 20px;
+  color:var(--text3); font-size:.85rem;
+}
+.empty-docs .e-icon { font-size:2.8rem; margin-bottom:10px; opacity:.4; }
+
+/* INSTALL BANNER */
+.install-banner {
+  margin: 0 16px 12px; padding: 12px 16px;
+  background: linear-gradient(135deg, rgba(79,142,247,.12), rgba(124,106,247,.12));
+  border: 1px solid rgba(79,142,247,.25); border-radius: var(--r);
+  display:flex; align-items:center; gap:12px;
+  animation: slideIn .4s ease;
+}
+.install-banner-text { flex:1; font-size:.8rem; color:var(--text2); font-weight:600; }
+.install-banner-text strong { color:var(--accent); display:block; font-size:.85rem; }
+.install-btn {
+  padding: 8px 14px; border-radius: 10px;
+  background: var(--accent); border:none; color:white;
+  font-family:var(--font); font-size:.8rem; font-weight:800; cursor:pointer;
+  flex-shrink:0; transition: opacity .2s;
+}
+.install-btn:active { opacity:.85; }
+
+/* ═══════════════════════════
+   READER SCREEN
+═══════════════════════════ */
+#reader {
+  background: var(--bg);
+}
+
+/* TOP NAV */
+.reader-nav {
+  height: 52px; display:flex; align-items:center; gap:8px;
+  padding: 0 12px;
+  background: var(--bg2); border-bottom: 1px solid var(--border);
+  flex-shrink: 0; position:sticky; top:0; z-index:50;
+}
+.back-btn {
+  padding: 6px 10px; border-radius:10px; background:var(--bg3);
+  border:1px solid var(--border); color:var(--text2);
+  font-size:.82rem; font-weight:700; cursor:pointer;
+  display:flex; align-items:center; gap:4px; transition: all .18s;
+}
+.back-btn:active { transform:scale(.93); }
+.reader-title {
+  flex:1; font-size:.82rem; font-weight:700;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  color:var(--text);
+}
+.nav-actions { display:flex; gap:6px; }
+
+/* TOOLBAR */
+.reader-toolbar {
+  display:flex; align-items:center; gap:6px; padding:8px 12px;
+  background:var(--bg2); border-bottom:1px solid var(--border);
+  flex-shrink:0; overflow-x:auto; -webkit-overflow-scrolling:touch;
+  scrollbar-width:none;
+}
+.reader-toolbar::-webkit-scrollbar { display:none; }
+.tbtn {
+  padding: 6px 12px; border-radius:10px;
+  border:1px solid var(--border); background:var(--bg3);
+  color:var(--text2); font-family:var(--font); font-size:.78rem; font-weight:700;
+  cursor:pointer; white-space:nowrap; transition:all .18s;
+  display:flex; align-items:center; gap:5px; flex-shrink:0;
+}
+.tbtn:active, .tbtn.on { background:rgba(79,142,247,.15); color:var(--accent); border-color:rgba(79,142,247,.35); }
+.tsep { width:1px; height:22px; background:var(--border); flex-shrink:0; margin:0 2px; }
+.zoom-val { font-family:'JetBrains Mono',monospace; font-size:.78rem; color:var(--text2); min-width:38px; text-align:center; flex-shrink:0; }
+
+/* HL COLORS */
+.hlc { width:18px; height:18px; border-radius:50%; cursor:pointer; border:2px solid transparent; flex-shrink:0; transition: transform .15s, border-color .15s; }
+.hlc:active, .hlc.on { transform:scale(1.3); border-color:var(--text); }
+
+/* PAGE NAV */
+.page-nav-bar {
+  display:none; align-items:center; gap:6px;
+  padding:7px 12px; background:var(--bg2); border-bottom:1px solid var(--border);
+  flex-shrink:0;
+}
+.page-nav-bar.show { display:flex; }
+.page-nav-bar span { font-size:.78rem; color:var(--text2); font-family:'JetBrains Mono',monospace; }
+.page-input {
+  width:42px; padding:4px 6px; border-radius:8px;
+  border:1px solid var(--border); background:var(--bg3);
+  color:var(--text); font-family:'JetBrains Mono',monospace; font-size:.78rem;
+  text-align:center; outline:none;
+}
+
+/* CONTENT */
+.reader-body { flex:1; overflow-y:auto; overflow-x:hidden; -webkit-overflow-scrolling:touch; position:relative; }
+
+#pdf-wrap { padding:12px; display:none; }
+.pdf-pg-wrap { margin:0 auto 14px; border-radius:10px; overflow:hidden; box-shadow:0 4px 20px rgba(0,0,0,.35); background:#fff; }
+.pdf-pg-wrap canvas { display:block; width:100% !important; height:auto !important; }
+.pg-label { text-align:center; font-size:.68rem; color:var(--text3); font-family:'JetBrains Mono',monospace; margin-bottom:4px; }
+
+#text-wrap {
+  max-width:700px; margin:0 auto; padding:20px 16px 60px;
+  font-size:1rem; line-height:1.85; color:var(--text); display:none;
+}
+#text-wrap h1,#text-wrap h2,#text-wrap h3 { font-weight:800; margin:1.2em 0 .5em; color:var(--text); }
+#text-wrap h1 { font-size:1.5rem; }
+#text-wrap h2 { font-size:1.2rem; }
+#text-wrap h3 { font-size:1rem; }
+#text-wrap p { margin-bottom:.8em; }
+#text-wrap table { border-collapse:collapse; width:100%; margin:1em 0; font-size:.82rem; overflow-x:auto; display:block; }
+#text-wrap th { background:var(--bg3); padding:8px 10px; border:1px solid var(--border); text-align:left; font-weight:700; }
+#text-wrap td { padding:6px 10px; border:1px solid var(--border); }
+#text-wrap tr:nth-child(even) td { background:var(--bg3); }
+#text-wrap pre { background:var(--bg3); padding:14px; border-radius:10px; overflow-x:auto; font-size:.82rem; font-family:'JetBrains Mono',monospace; }
+
+/* HIGHLIGHTS */
+.hl-y { background:rgba(210,153,34,.3);  border-radius:3px; cursor:pointer; }
+.hl-g { background:rgba(63,185,80,.28);  border-radius:3px; cursor:pointer; }
+.hl-b { background:rgba(79,142,247,.28); border-radius:3px; cursor:pointer; }
+.hl-p { background:rgba(248,81,73,.25);  border-radius:3px; cursor:pointer; }
+
+/* NOTES MODAL */
+.modal-overlay {
+  position:fixed; inset:0; background:rgba(0,0,0,.65);
+  z-index:200; display:none; align-items:flex-end;
+  animation: fadeO .2s ease;
+}
+.modal-overlay.open { display:flex; }
+.modal-sheet {
+  width:100%; background:var(--bg2); border-radius:20px 20px 0 0;
+  padding:0 0 var(--safe-bot);
+  animation: slideUp .3s cubic-bezier(.34,1.56,.64,1);
+  max-height:70vh; display:flex; flex-direction:column;
+}
+.modal-handle { width:36px; height:4px; border-radius:2px; background:var(--border); margin:10px auto; }
+.modal-header { padding:8px 18px 12px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--border); }
+.modal-title { font-size:.95rem; font-weight:800; }
+.modal-close { background:none; border:none; color:var(--text3); font-size:1.1rem; cursor:pointer; padding:4px; }
+.notes-ta {
+  flex:1; padding:14px 18px; background:transparent; border:none; outline:none;
+  color:var(--text); font-family:var(--font); font-size:.9rem; line-height:1.7;
+  resize:none; min-height:160px;
+}
+.modal-footer { padding:12px 18px; display:flex; gap:8px; justify-content:flex-end; border-top:1px solid var(--border); }
+.mbtn {
+  padding:9px 18px; border-radius:12px; font-family:var(--font); font-size:.82rem; font-weight:800;
+  cursor:pointer; border:1px solid var(--border); background:var(--bg3); color:var(--text2); transition:all .18s;
+}
+.mbtn.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+.mbtn:active { opacity:.82; transform:scale(.96); }
+
+/* SEARCH MODAL */
+.search-modal {
+  position:fixed; top:0; left:0; right:0; z-index:300;
+  background:var(--bg2); border-bottom:1px solid var(--border);
+  padding:calc(12px + var(--safe-top)) 16px 12px;
+  display:none; gap:10px; align-items:center;
+  animation: slideDown .25s ease;
+}
+.search-modal.open { display:flex; }
+.search-input {
+  flex:1; padding:10px 14px; border-radius:12px;
+  border:1px solid var(--border); background:var(--bg3);
+  color:var(--text); font-family:var(--font); font-size:.88rem; outline:none;
+}
+.search-input:focus { border-color:var(--accent); }
+.s-count { font-size:.75rem; color:var(--text3); white-space:nowrap; font-family:'JetBrains Mono',monospace; }
+.s-close { background:none; border:none; color:var(--text3); font-size:1rem; cursor:pointer; padding:4px; }
+
+/* TOAST */
+.toast {
+  position:fixed; bottom:calc(24px + var(--safe-bot)); left:50%; transform:translateX(-50%) translateY(80px);
+  background:var(--bg4); border:1px solid var(--border); color:var(--text);
+  padding:9px 20px; border-radius:24px; font-size:.82rem; font-weight:600;
+  z-index:999; transition:transform .3s; box-shadow:0 8px 24px rgba(0,0,0,.4);
+  white-space:nowrap;
+}
+.toast.show { transform:translateX(-50%) translateY(0); }
+
+/* LOADING */
+.loading-overlay {
+  position:absolute; inset:0; display:none;
+  flex-direction:column; align-items:center; justify-content:center; gap:16px;
+  background:var(--bg); z-index:10;
+}
+.loading-overlay.show { display:flex; }
+.spinner { width:36px; height:36px; border:3px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin .8s linear infinite; }
+.loading-text { font-size:.88rem; color:var(--text2); font-weight:700; }
+.loading-sub { font-size:.75rem; color:var(--text3); }
+
+/* FAB */
+.fab {
+  position:fixed; right:18px; bottom:calc(24px + var(--safe-bot));
+  width:52px; height:52px; border-radius:16px;
+  background:linear-gradient(135deg, var(--accent), var(--accent2));
+  border:none; color:white; font-size:1.4rem;
+  cursor:pointer; display:flex; align-items:center; justify-content:center;
+  box-shadow:0 6px 20px rgba(79,142,247,.45); z-index:50;
+  transition:transform .2s;
+}
+.fab:active { transform:scale(.9); }
+.fab.hidden { display:none; }
+
+/* ANIMATIONS */
+@keyframes slideUp   { from { transform:translateY(100%); } to { transform:translateY(0); } }
+@keyframes slideDown { from { transform:translateY(-100%); } to { transform:none; } }
+@keyframes slideIn   { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:none; } }
+@keyframes fadeO     { from { opacity:0; } to { opacity:1; } }
+@keyframes spin      { to { transform:rotate(360deg); } }
+@keyframes fadeIn    { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:none; } }
+
+/* SCROLLBAR */
+::-webkit-scrollbar { width:4px; height:4px; }
+::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
+</style>
+</head>
+<body>
+
+<!-- ════════ HOME SCREEN ════════ -->
+<div class="screen active" id="home">
+
+  <div class="home-header">
+    <div class="app-logo">
+      <div class="logo-icon-wrap">📖</div>
+      <div>
+        <div class="logo-text">DocReader</div>
+        <div class="logo-sub">স্মার্ট ডকুমেন্ট রিডার</div>
+      </div>
+    </div>
+    <div class="header-actions">
+      <button class="icon-btn" onclick="toggleTheme()" id="theme-btn" title="Theme">🌙</button>
+    </div>
+  </div>
+
+  <!-- Install Banner -->
+  <div class="install-banner" id="install-banner" style="display:none">
+    <div>📲</div>
+    <div class="install-banner-text">
+      <strong>App হিসেবে Install করুন!</strong>
+      Offline ব্যবহার করতে পারবেন
+    </div>
+    <button class="install-btn" onclick="installApp()">Install</button>
+  </div>
+
+  <!-- Upload -->
+  <div class="upload-zone" id="upload-zone"
+       ondragover="event.preventDefault();this.classList.add('drag')"
+       ondragleave="this.classList.remove('drag')"
+       ondrop="handleDrop(event)">
+    <input type="file" id="file-input" accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt" multiple onchange="handleFiles(this.files)">
+    <div class="upload-emoji">📂</div>
+    <div class="upload-title">ফাইল খুলুন</div>
+    <div class="upload-sub">ক্লিক করুন বা ড্র্যাগ করুন</div>
+    <div class="fmt-chips">
+      <span class="chip chip-pdf">PDF</span>
+      <span class="chip chip-word">WORD</span>
+      <span class="chip chip-ppt">PPT</span>
+      <span class="chip chip-excel">EXCEL</span>
+      <span class="chip chip-txt">TXT</span>
+    </div>
+  </div>
+
+  <!-- Recent Docs -->
+  <div class="section-head">
+    <div class="section-title">সাম্প্রতিক ফাইল</div>
+    <button class="clear-all" onclick="clearAll()">সব মুছুন</button>
+  </div>
+
+  <div class="doc-list" id="doc-list">
+    <div class="empty-docs" id="empty-msg">
+      <div class="e-icon">📄</div>
+      <div>কোনো ফাইল নেই</div>
+      <div style="font-size:.72rem;margin-top:6px;color:var(--text3)">উপরে ক্লিক করে ফাইল খুলুন</div>
+    </div>
+  </div>
+
+  <!-- FAB for quick open -->
+  <button class="fab" onclick="document.getElementById('file-input').click()" title="Open File">＋</button>
+</div>
+
+<!-- ════════ READER SCREEN ════════ -->
+<div class="screen" id="reader">
+
+  <!-- Nav -->
+  <div class="reader-nav">
+    <button class="back-btn" onclick="goHome()">← ফিরুন</button>
+    <div class="reader-title" id="reader-title">—</div>
+    <div class="nav-actions">
+      <button class="icon-btn" onclick="toggleSearch()" title="Search">🔍</button>
+      <button class="icon-btn" onclick="openNotes()" title="Notes">📝</button>
+    </div>
+  </div>
+
+  <!-- Toolbar -->
+  <div class="reader-toolbar">
+    <button class="tbtn" onclick="zoomOut()">−</button>
+    <span class="zoom-val" id="zoom-val">100%</span>
+    <button class="tbtn" onclick="zoomIn()">+</button>
+    <div class="tsep"></div>
+    <button class="tbtn" id="hl-btn" onclick="toggleHL()">✏️ হাইলাইট</button>
+    <div class="hlc on" style="background:#d29922" data-c="y" onclick="pickHL(this)"></div>
+    <div class="hlc" style="background:#3fb950" data-c="g" onclick="pickHL(this)"></div>
+    <div class="hlc" style="background:#4f8ef7" data-c="b" onclick="pickHL(this)"></div>
+    <div class="hlc" style="background:#f85149" data-c="p" onclick="pickHL(this)"></div>
+    <div class="tsep"></div>
+    <button class="tbtn" onclick="openNotes()">📝 নোট</button>
+    <button class="tbtn" onclick="clearHighlights()">🗑 HL মুছুন</button>
+  </div>
+
+  <!-- Page Nav (PDF only) -->
+  <div class="page-nav-bar" id="page-nav">
+    <button class="tbtn" onclick="prevPg()">◀</button>
+    <span>পাতা</span>
+    <input class="page-input" type="number" id="pg-input" value="1" min="1" onchange="goPage(this.value)">
+    <span id="pg-total">/1</span>
+    <button class="tbtn" onclick="nextPg()">▶</button>
+  </div>
+
+  <!-- Body -->
+  <div class="reader-body" id="reader-body">
+    <div class="loading-overlay" id="loading">
+      <div class="spinner"></div>
+      <div class="loading-text" id="loading-text">লোড হচ্ছে...</div>
+      <div class="loading-sub" id="loading-sub"></div>
+    </div>
+    <div id="pdf-wrap"></div>
+    <div id="text-wrap"></div>
+  </div>
+</div>
+
+<!-- ════════ NOTES MODAL ════════ -->
+<div class="modal-overlay" id="notes-modal" onclick="if(event.target===this)closeNotes()">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div class="modal-title">📝 আমার নোট</div>
+      <button class="modal-close" onclick="closeNotes()">✕</button>
+    </div>
+    <textarea class="notes-ta" id="notes-ta" placeholder="এখানে নোট লিখুন...&#10;হাইলাইট করা অংশ AI দিয়ে পরে বিশ্লেষণ করুন।"></textarea>
+    <div class="modal-footer">
+      <button class="mbtn" onclick="clearNotes()">মুছুন</button>
+      <button class="mbtn" onclick="exportNotes()">📤 Export</button>
+      <button class="mbtn primary" onclick="saveNotes()">✅ সেভ</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════ SEARCH MODAL ════════ -->
+<div class="search-modal" id="search-modal">
+  <input class="search-input" type="text" id="search-input" placeholder="🔍 খুঁজুন..." oninput="doSearch(this.value)">
+  <span class="s-count" id="s-count"></span>
+  <button class="s-close" onclick="toggleSearch()">✕</button>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ── SERVICE WORKER ──
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js').then(() => {
+    console.log('SW registered');
+  });
+}
+
+// ── PWA INSTALL ──
+let deferredPrompt = null;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault(); deferredPrompt = e;
+  document.getElementById('install-banner').style.display = 'flex';
+});
+function installApp() {
+  if (!deferredPrompt) return;
+  deferredPrompt.prompt();
+  deferredPrompt.userChoice.then(() => {
+    deferredPrompt = null;
+    document.getElementById('install-banner').style.display = 'none';
+  });
+}
+
+// ── STATE ──
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+let docs = JSON.parse(localStorage.getItem('dr_docs') || '[]');
+let currentDoc = null, pdfObj = null;
+let curPage = 1, totalPgs = 1, zoom = 1.0;
+let hlActive = false, hlColor = 'y';
+let isDark = true;
+const fileCache = {};
+
+// ── THEME ──
+function toggleTheme() {
+  isDark = !isDark;
+  document.body.classList.toggle('light', !isDark);
+  document.getElementById('theme-btn').textContent = isDark ? '🌙' : '☀️';
+  document.querySelector('meta[name="theme-color"]').content = isDark ? '#0d1117' : '#f6f8fa';
+}
+
+// ── SCREENS ──
+function goHome() {
+  document.getElementById('reader').classList.remove('active');
+  document.getElementById('home').classList.add('active');
+  document.getElementById('search-modal').classList.remove('open');
+  currentDoc = null; pdfObj = null;
+}
+function goReader() {
+  document.getElementById('home').classList.remove('active');
+  document.getElementById('reader').classList.add('active');
+}
+
+// ── FILE HANDLING ──
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('upload-zone').classList.remove('drag');
+  handleFiles(e.dataTransfer.files);
+}
+function handleFiles(files) {
+  [...files].forEach(f => {
+    const ext = f.name.split('.').pop().toLowerCase();
+    const ok = ['pdf','doc','docx','ppt','pptx','xls','xlsx','txt'];
+    if (!ok.includes(ext)) { toast('❌ সাপোর্টেড নয়: .' + ext); return; }
+    const id = Date.now() + '-' + Math.random().toString(36).slice(2);
+    fileCache[id] = f;
+    const meta = { id, name: f.name, ext, size: fmtSize(f.size), time: Date.now() };
+    docs.unshift(meta);
+    if (docs.length > 20) docs.pop();
+    saveDocs();
+    renderList();
+    openFile(id);
+  });
+}
+function fmtSize(b) {
+  if (b < 1024) return b + 'B';
+  if (b < 1024*1024) return (b/1024).toFixed(1) + 'KB';
+  return (b/1024/1024).toFixed(1) + 'MB';
+}
+function getIcon(ext) {
+  const m = {pdf:'📕',doc:'📘',docx:'📘',ppt:'📙',pptx:'📙',xls:'📗',xlsx:'📗',txt:'📄'};
+  return m[ext] || '📄';
+}
+function getColor(ext) {
+  const m = {pdf:'rgba(248,81,73,.15)',doc:'rgba(79,142,247,.15)',docx:'rgba(79,142,247,.15)',
+             ppt:'rgba(240,136,62,.15)',pptx:'rgba(240,136,62,.15)',xls:'rgba(63,185,80,.15)',xlsx:'rgba(63,185,80,.15)',txt:'rgba(124,106,247,.15)'};
+  return m[ext] || 'rgba(139,148,158,.15)';
+}
+function saveDocs() { localStorage.setItem('dr_docs', JSON.stringify(docs.map(d => ({...d})))); }
+function clearAll() {
+  if (!confirm('সব ফাইলের তালিকা মুছবে?')) return;
+  docs = []; saveDocs(); renderList();
+}
+
+// ── LIST RENDER ──
+function renderList() {
+  const list = document.getElementById('doc-list');
+  const em = document.getElementById('empty-msg');
+  if (docs.length === 0) { em.style.display = ''; list.innerHTML = ''; list.appendChild(em); return; }
+  em.style.display = 'none';
+  list.innerHTML = docs.map(d => `
+    <div class="doc-card" onclick="openFile('${d.id}')">
+      <div class="doc-card-icon" style="background:${getColor(d.ext)}">${getIcon(d.ext)}</div>
+      <div class="doc-card-info">
+        <div class="doc-card-name">${d.name}</div>
+        <div class="doc-card-meta">${d.ext.toUpperCase()} · ${d.size} · ${timeAgo(d.time)}</div>
+      </div>
+      <button class="doc-card-del" onclick="event.stopPropagation();delDoc('${d.id}')">✕</button>
+    </div>
+  `).join('');
+}
+function timeAgo(t) {
+  const s = (Date.now()-t)/1000;
+  if (s < 60) return 'এইমাত্র';
+  if (s < 3600) return Math.floor(s/60) + ' মিনিট আগে';
+  if (s < 86400) return Math.floor(s/3600) + ' ঘন্টা আগে';
+  return Math.floor(s/86400) + ' দিন আগে';
+}
+function delDoc(id) {
+  docs = docs.filter(d => d.id !== id);
+  delete fileCache[id];
+  saveDocs(); renderList();
+}
+
+// ── OPEN FILE ──
+async function openFile(id) {
+  const meta = docs.find(d => d.id === id);
+  if (!meta) { toast('❗ ফাইল পাওয়া যায়নি — আবার খুলুন'); return; }
+  const file = fileCache[id];
+  if (!file) { toast('📂 ফাইল আবার select করুন'); document.getElementById('file-input').click(); return; }
+
+  currentDoc = meta;
+  document.getElementById('reader-title').textContent = meta.name;
+  document.getElementById('pdf-wrap').style.display = 'none';
+  document.getElementById('text-wrap').style.display = 'none';
+  document.getElementById('pdf-wrap').innerHTML = '';
+  document.getElementById('text-wrap').innerHTML = '';
+  document.getElementById('page-nav').classList.remove('show');
+  showLoading('লোড হচ্ছে...', meta.name);
+  goReader();
+
+  try {
+    if (meta.ext === 'pdf') await openPDF(file);
+    else if (['docx','doc'].includes(meta.ext)) await openWord(file);
+    else if (['xlsx','xls'].includes(meta.ext)) await openExcel(file);
+    else if (['pptx','ppt'].includes(meta.ext)) await openPPT(file);
+    else await openTxt(file);
+    hideLoading();
+    // move to top of recent
+    docs = [meta, ...docs.filter(d => d.id !== id)];
+    saveDocs(); renderList();
+  } catch(err) {
+    hideLoading();
+    document.getElementById('text-wrap').style.display = 'block';
+    document.getElementById('text-wrap').innerHTML = `<div style="color:var(--red);padding:20px;text-align:center">❌ ফাইল লোড হয়নি।<br><small>${err.message}</small></div>`;
+  }
+}
+
+async function openPDF(file) {
+  const ab = await file.arrayBuffer();
+  pdfObj = await pdfjsLib.getDocument({data: ab}).promise;
+  totalPgs = pdfObj.numPages; curPage = 1;
+  document.getElementById('pg-total').textContent = '/' + totalPgs;
+  document.getElementById('pg-input').max = totalPgs;
+  document.getElementById('page-nav').classList.add('show');
+  document.getElementById('pdf-wrap').style.display = 'block';
+  setLoading('রেন্ডার হচ্ছে...', `${totalPgs} পাতা`);
+  await renderPDFPages();
+}
+async function renderPDFPages() {
+  const wrap = document.getElementById('pdf-wrap');
+  wrap.innerHTML = '';
+  const w = wrap.clientWidth - 24;
+  const max = Math.min(totalPgs, 50);
+  for (let i = 1; i <= max; i++) {
+    const pg = await pdfObj.getPage(i);
+    const vp = pg.getViewport({scale: 1});
+    const scale = (w / vp.width) * zoom;
+    const svp = pg.getViewport({scale});
+    const div = document.createElement('div');
+    div.className = 'pdf-pg-wrap'; div.id = 'pg-' + i;
+    const lbl = document.createElement('div');
+    lbl.className = 'pg-label'; lbl.textContent = `${i} / ${totalPgs}`;
+    const canvas = document.createElement('canvas');
+    canvas.width = svp.width; canvas.height = svp.height;
+    div.appendChild(lbl); div.appendChild(canvas);
+    wrap.appendChild(div);
+    await pg.render({canvasContext: canvas.getContext('2d'), viewport: svp}).promise;
+    if (i % 5 === 0) setLoading('রেন্ডার হচ্ছে...', `${i}/${totalPgs} পাতা`);
+  }
+  if (totalPgs > 50) {
+    const note = document.createElement('div');
+    note.style.cssText = 'text-align:center;padding:20px;color:var(--text3);font-size:.78rem';
+    note.textContent = `প্রথম ৫০টি পাতা দেখানো হচ্ছে। মোট ${totalPgs} পাতা।`;
+    wrap.appendChild(note);
+  }
+}
+
+async function openWord(file) {
+  const ab = await file.arrayBuffer();
+  const result = await mammoth.convertToHtml({arrayBuffer: ab});
+  const wrap = document.getElementById('text-wrap');
+  wrap.style.display = 'block';
+  wrap.innerHTML = result.value || '<p style="color:var(--text3)">বিষয়বস্তু পাওয়া যায়নি।</p>';
+}
+
+async function openExcel(file) {
+  const ab = await file.arrayBuffer();
+  const wb = XLSX.read(ab, {type:'array'});
+  let html = '';
+  wb.SheetNames.forEach(name => {
+    html += `<h2>📊 ${name}</h2>`;
+    html += XLSX.utils.sheet_to_html(wb.Sheets[name]);
+  });
+  const wrap = document.getElementById('text-wrap');
+  wrap.style.display = 'block';
+  wrap.innerHTML = html;
+}
+
+async function openPPT(file) {
+  const wrap = document.getElementById('text-wrap');
+  wrap.style.display = 'block';
+  wrap.innerHTML = `
+    <div style="text-align:center;padding:32px 16px">
+      <div style="font-size:3rem;margin-bottom:12px">📙</div>
+      <h2>${file.name}</h2>
+      <p style="color:var(--text2);margin-top:8px">PowerPoint ব্রাউজারে সম্পূর্ণ দেখানো সম্ভব নয়।<br>
+      <small style="color:var(--text3)">Google Slides বা WPS Office-এ খুলুন।</small></p>
+      <div style="margin-top:20px;background:var(--bg3);border-radius:12px;padding:14px;text-align:left;font-size:.82rem;color:var(--text2)">
+        <b>ফাইলের তথ্য:</b><br>
+        📎 নাম: ${file.name}<br>
+        📦 সাইজ: ${fmtSize(file.size)}<br>
+        📅 টাইপ: PowerPoint Presentation
+      </div>
+    </div>`;
+}
+
+async function openTxt(file) {
+  const text = await file.text();
+  const wrap = document.getElementById('text-wrap');
+  wrap.style.display = 'block';
+  wrap.innerHTML = `<pre>${escHtml(text)}</pre>`;
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── LOADING ──
+function showLoading(t, s='') {
+  const o = document.getElementById('loading');
+  document.getElementById('loading-text').textContent = t;
+  document.getElementById('loading-sub').textContent = s;
+  o.classList.add('show');
+}
+function setLoading(t, s) {
+  document.getElementById('loading-text').textContent = t;
+  document.getElementById('loading-sub').textContent = s;
+}
+function hideLoading() { document.getElementById('loading').classList.remove('show'); }
+
+// ── ZOOM ──
+function zoomIn()  { zoom = Math.min(2.5, +(zoom+.2).toFixed(1)); applyZoom(); }
+function zoomOut() { zoom = Math.max(.5, +(zoom-.2).toFixed(1));  applyZoom(); }
+function applyZoom() {
+  document.getElementById('zoom-val').textContent = Math.round(zoom*100) + '%';
+  document.getElementById('text-wrap').style.fontSize = zoom + 'rem';
+  if (pdfObj) { showLoading('Zoom হচ্ছে...'); renderPDFPages().then(hideLoading); }
+}
+
+// ── PAGE NAV ──
+function prevPg() { if (curPage > 1) scrollPage(--curPage); }
+function nextPg() { if (curPage < totalPgs) scrollPage(++curPage); }
+function goPage(v) { const p=+v; if (p>=1&&p<=totalPgs) scrollPage(p); }
+function scrollPage(p) {
+  curPage = p; document.getElementById('pg-input').value = p;
+  const el = document.getElementById('pg-' + p);
+  if (el) el.scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+// ── HIGHLIGHT ──
+function toggleHL() {
+  hlActive = !hlActive;
+  document.getElementById('hl-btn').classList.toggle('on', hlActive);
+  document.getElementById('hl-btn').textContent = hlActive ? '✏️ চালু' : '✏️ হাইলাইট';
+  toast(hlActive ? '✏️ হাইলাইট মোড চালু — টেক্সট select করুন' : 'হাইলাইট মোড বন্ধ');
+}
+function pickHL(el) {
+  document.querySelectorAll('.hlc').forEach(h => h.classList.remove('on'));
+  el.classList.add('on'); hlColor = el.dataset.c;
+}
+document.addEventListener('selectionchange', () => {
+  if (!hlActive) return;
+  const sel = window.getSelection();
+  if (!sel || sel.isCollapsed || !sel.toString().trim()) return;
+  setTimeout(() => {
+    const s = window.getSelection();
+    if (!s || s.isCollapsed) return;
+    try {
+      const range = s.getRangeAt(0);
+      const span = document.createElement('span');
+      span.className = 'hl-' + hlColor;
+      span.onclick = () => { span.outerHTML = span.innerHTML; };
+      range.surroundContents(span);
+      s.removeAllRanges();
+    } catch(e) {}
+  }, 300);
+});
+function clearHighlights() {
+  document.querySelectorAll('.hl-y,.hl-g,.hl-b,.hl-p').forEach(el => { el.outerHTML = el.innerHTML; });
+  toast('🗑 সব হাইলাইট মুছে গেছে');
+}
+
+// ── SEARCH ──
+function toggleSearch() {
+  const m = document.getElementById('search-modal');
+  m.classList.toggle('open');
+  if (m.classList.contains('open')) {
+    setTimeout(() => document.getElementById('search-input').focus(), 100);
+  } else {
+    document.getElementById('search-input').value = '';
+    document.getElementById('s-count').textContent = '';
+  }
+}
+function doSearch(q) {
+  const wrap = document.getElementById('text-wrap');
+  if (!wrap || !q.trim()) { document.getElementById('s-count').textContent = ''; return; }
+  const text = wrap.innerText;
+  const re = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'), 'gi');
+  const matches = (text.match(re) || []).length;
+  document.getElementById('s-count').textContent = matches ? matches + 'টি' : 'নেই';
+}
+
+// ── NOTES ──
+function openNotes() { document.getElementById('notes-modal').classList.add('open'); }
+function closeNotes() { document.getElementById('notes-modal').classList.remove('open'); }
+function saveNotes() {
+  localStorage.setItem('dr_notes_' + (currentDoc?.id||'global'), document.getElementById('notes-ta').value);
+  toast('✅ নোট সেভ হয়েছে!'); closeNotes();
+}
+function clearNotes() { document.getElementById('notes-ta').value = ''; }
+function exportNotes() {
+  const txt = document.getElementById('notes-ta').value;
+  if (!txt) { toast('❗ নোট নেই'); return; }
+  const blob = new Blob([txt], {type:'text/plain;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = (currentDoc?.name || 'notes') + '_notes.txt';
+  a.click(); toast('📤 Export হয়েছে');
+}
+// Load notes for current doc
+function loadNotes() {
+  const saved = localStorage.getItem('dr_notes_' + (currentDoc?.id||'global')) || '';
+  document.getElementById('notes-ta').value = saved;
+}
+document.getElementById('notes-modal').addEventListener('transitionend', loadNotes);
+
+// ── TOAST ──
+function toast(msg, dur=2500) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(t._t);
+  t._t = setTimeout(() => t.classList.remove('show'), dur);
+}
+
+// ── INIT ──
+renderList();
+
+// Offline indicator
+window.addEventListener('offline', () => toast('📵 Offline — cached ফাইল পড়া যাবে'));
+window.addEventListener('online',  () => toast('🌐 Online হয়েছে'));
+</script>
+</body>
+</html>
